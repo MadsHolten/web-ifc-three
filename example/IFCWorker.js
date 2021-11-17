@@ -86589,6 +86589,7 @@ class IFCParser {
             [IFCSPACE]: true,
             [IFCOPENINGELEMENT]: false
         };
+        this.mhraTestObject = {};
         this.currentWebIfcID = -1;
         this.currentModelID = -1;
     }
@@ -86625,7 +86626,54 @@ class IFCParser {
     }
     async loadAllGeometry() {
         await this.saveAllPlacedGeometriesByMaterial();
+        const geoGroup = this.buildMHRAObject();
+        console.log(geoGroup);
         return this.generateAllGeometriesByMaterial();
+    }
+    buildMHRAObject() {
+        const geometryObject = this.getGeometryAndMaterialsIndividual();
+        const globalGroup = new Group();
+        Object.keys(geometryObject).forEach((expressID) => {
+            const geometryArray = geometryObject[expressID];
+            let objectModel;
+            if (geometryArray.length > 1)
+                objectModel = new Group();
+            geometryArray.forEach((geoMatObj) => {
+                const mesh = new IFCModel(geoMatObj.geometry, geoMatObj.material);
+                if (objectModel == undefined) {
+                    objectModel = mesh;
+                }
+                else {
+                    objectModel.add(mesh);
+                }
+                objectModel.name = expressID;
+            });
+            globalGroup.add(objectModel);
+        });
+        return globalGroup;
+    }
+    getGeometryAndMaterialsIndividual() {
+        const items = this.state.models[this.currentModelID].items;
+        const obj = {};
+        const seenIDs = [];
+        for (let materialID in items) {
+            if (items.hasOwnProperty(materialID)) {
+                const material = items[materialID].material;
+                const keys = Object.keys(items[materialID].geometries);
+                keys.forEach((expressID) => {
+                    const geometry = items[materialID].geometries[expressID];
+                    const geometryMaterial = { geometry, material };
+                    if (seenIDs.indexOf(expressID) == -1) {
+                        obj[expressID] = [geometryMaterial];
+                        seenIDs.push(expressID);
+                    }
+                    else {
+                        obj[expressID].push(geometryMaterial);
+                    }
+                });
+            }
+        }
+        return obj;
     }
     generateAllGeometriesByMaterial() {
         const { geometry, materials } = this.getGeometryAndMaterials();
@@ -86663,7 +86711,6 @@ class IFCParser {
             const flatMesh = flatMeshes.get(i);
             const placedGeom = flatMesh.geometries;
             for (let j = 0; j < placedGeom.size(); j++) {
-                console.log(placedGeom.get(j));
                 await this.savePlacedGeometry(placedGeom.get(j), flatMesh.expressID);
             }
         }

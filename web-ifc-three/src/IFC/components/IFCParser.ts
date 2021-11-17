@@ -15,10 +15,12 @@ import {
     Matrix4,
     BufferGeometry,
     BufferAttribute,
-    Material
+    Material,
+    Group,
+    Mesh
 } from 'three';
-import {BvhManager} from './BvhManager';
-import {IFCModel} from './IFCModel';
+import { BvhManager } from './BvhManager';
+import { IFCModel } from './IFCModel';
 
 export interface ParserProgress {
     loaded: number;
@@ -48,6 +50,8 @@ export class IFCParser implements ParserAPI {
         [IFCOPENINGELEMENT]: false
     }
 
+    public mhraTestObject: any = {};
+
     // Represents the index of the model in webIfcAPI
     private currentWebIfcID = -1;
     // When using JSON data for optimization, webIfcAPI is reinitialized every time a model is loaded
@@ -67,7 +71,7 @@ export class IFCParser implements ParserAPI {
         if (this.state.api.wasmModule === undefined) await this.state.api.Init();
         await this.newIfcModel(buffer);
         this.loadedModels++;
-        if(coordinationMatrix){
+        if (coordinationMatrix) {
             await this.state.api.SetGeometryTransformation(this.currentWebIfcID, coordinationMatrix);
         }
         return this.loadAllGeometry();
@@ -78,7 +82,7 @@ export class IFCParser implements ParserAPI {
     }
 
     private notifyProgress(loaded: number, total: number) {
-        if (this.state.onProgress) this.state.onProgress({loaded, total});
+        if (this.state.onProgress) this.state.onProgress({ loaded, total });
     }
 
     private async newIfcModel(buffer: any) {
@@ -96,12 +100,93 @@ export class IFCParser implements ParserAPI {
 
     private async loadAllGeometry() {
         await this.saveAllPlacedGeometriesByMaterial();
+        const geoGroup = this.buildMHRAObject(); // Build the object
+        console.log(geoGroup);
         return this.generateAllGeometriesByMaterial();
     }
 
+    // Desired result:
+    // {
+    //     expressID: [vertices]
+    // }
+    private buildMHRAObject() {
+
+        // NB! Geometry er allerede én stor buggerGeometri på det her tidspunkt!
+        const geometryObject = this.getGeometryAndMaterialsIndividual();
+
+        const globalGroup = new Group();
+
+        Object.keys(geometryObject).forEach((expressID: string) => {
+
+            const geometryArray: any = geometryObject[expressID];
+
+            let objectModel: any;
+            if(geometryArray.length > 1) objectModel = new Group();
+
+            geometryArray.forEach((geoMatObj: any) => {
+                const mesh = new IFCModel(geoMatObj.geometry, geoMatObj.material);
+
+                // Single material object
+                if(objectModel == undefined){
+                    objectModel = mesh;
+                }
+                // Multi-material object
+                else{
+                    objectModel.add(mesh);
+                }
+                objectModel.name = expressID;
+            });
+
+            globalGroup.add(objectModel);
+
+        });
+
+        return globalGroup;
+    }
+
+    private getGeometryAndMaterialsIndividual() {
+
+        const items = this.state.models[this.currentModelID].items;
+
+        const obj: any = {};
+        const seenIDs: string[] = [];
+
+        for (let materialID in items) {
+
+            if (items.hasOwnProperty(materialID)) {
+
+                const material = items[materialID].material;
+                const keys: any = Object.keys(items[materialID].geometries);
+
+                keys.forEach((expressID: any) => {
+
+                    const geometry: BufferGeometry = items[materialID].geometries[expressID];
+                    const geometryMaterial: any = { geometry, material };
+
+                    // If new expressID, append it to the overall object
+                    if (seenIDs.indexOf(expressID) == -1) {
+                        obj[expressID] = [geometryMaterial];
+                        seenIDs.push(expressID);
+                    } 
+                    
+                    // If not new, push the new geometry/material to the overall array
+                    else {
+                        obj[expressID].push(geometryMaterial);
+                    }
+
+                })
+
+            }
+        }
+
+        return obj;
+
+    }
+
     private generateAllGeometriesByMaterial() {
-        const {geometry, materials} = this.getGeometryAndMaterials();
-        if(this.BVH) this.BVH.applyThreeMeshBVH(geometry);
+        const { geometry, materials } = this.getGeometryAndMaterials();
+
+        if (this.BVH) this.BVH.applyThreeMeshBVH(geometry);
         const mesh = new IFCModel(geometry, materials);
         mesh.modelID = this.currentModelID;
         this.state.models[this.currentModelID].mesh = mesh;
@@ -120,7 +205,7 @@ export class IFCParser implements ParserAPI {
             }
         }
         const geometry = merge(mergedByMaterial, true);
-        return {geometry, materials};
+        return { geometry, materials };
     }
 
     private async saveAllPlacedGeometriesByMaterial() {
@@ -131,7 +216,7 @@ export class IFCParser implements ParserAPI {
         const size = flatMeshes.size();
         let counter = 0;
         for (let i = 0; i < size; i++) {
-            if(i > counter) {
+            if (i > counter) {
                 this.notifyProgress(i, size);
                 counter += Math.trunc(size / 10);
             }
@@ -139,7 +224,6 @@ export class IFCParser implements ParserAPI {
             const placedGeom = flatMesh.geometries;
 
             for (let j = 0; j < placedGeom.size(); j++) {
-                console.log(placedGeom.get(j));
                 await this.savePlacedGeometry(placedGeom.get(j), flatMesh.expressID);
             }
         }
@@ -148,12 +232,12 @@ export class IFCParser implements ParserAPI {
     // Temporary: in the future everything will use StreamAllMeshes()
     private async addOptionalCategories() {
 
-        const optionalTypes: number[] =[];
+        const optionalTypes: number[] = [];
 
-        for(let key in this.optionalCategories) {
-            if(this.optionalCategories.hasOwnProperty(key)) {
+        for (let key in this.optionalCategories) {
+            if (this.optionalCategories.hasOwnProperty(key)) {
                 const category = parseInt(key);
-                if(this.optionalCategories[category]) optionalTypes.push(category);
+                if (this.optionalCategories[category]) optionalTypes.push(category);
             }
         }
 
@@ -183,7 +267,7 @@ export class IFCParser implements ParserAPI {
         const geometry = await this.state.api.GetGeometry(this.currentWebIfcID, placed.geometryExpressID);
         const vertexData = await this.getVertices(geometry);
         const indices = await this.getIndices(geometry);
-        const {vertices, normals} = IFCParser.extractVertexData(vertexData);
+        const { vertices, normals } = IFCParser.extractVertexData(vertexData);
         return IFCParser.ifcGeomToBufferGeom(vertices, normals, indices);
     }
 
@@ -221,7 +305,7 @@ export class IFCParser implements ParserAPI {
             isNormalData ? normals.push(vertexData[i]) : vertices.push(vertexData[i]);
             if ((i + 1) % 3 == 0) isNormalData = !isNormalData;
         }
-        return {vertices, normals};
+        return { vertices, normals };
     }
 
     private saveGeometryByMaterial(geom: BufferGeometry, placedGeom: PlacedGeometry, id: number) {
@@ -245,9 +329,9 @@ export class IFCParser implements ParserAPI {
         const items = this.state.models[this.currentModelID].items;
         if (items[colorID]) return;
         const col = new Color(color.x, color.y, color.z);
-        const newMaterial = new MeshLambertMaterial({color: col, side: DoubleSide});
+        const newMaterial = new MeshLambertMaterial({ color: col, side: DoubleSide });
         newMaterial.transparent = color.w !== 1;
         if (newMaterial.transparent) newMaterial.opacity = color.w;
-        items[colorID] = {material: newMaterial, geometries: {}};
+        items[colorID] = { material: newMaterial, geometries: {} };
     }
 }
