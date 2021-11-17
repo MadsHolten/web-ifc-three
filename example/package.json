@@ -25,9 +25,10 @@
   "scripts": {
     "build": "rollup -c && npm run copy-files",
     "watch": "rollup -c -w",
-    "copy-files": "cpy ../node_modules/web-ifc/web-ifc.wasm . && cpy ../node_modules/web-ifc/web-ifc-mt.wasm . && cpy ../web-ifc-three/dist/IFCWorker.js . && cpy ../web-ifc-three/dist/IFCWorker.js.map ."
+    "copy-files": "cpy ../web-ifc-three/dist/IFCWorker.js . && cpy ../web-ifc-three/dist/IFCWorker.js.map ."
   },
   "dependencies": {
+    "@rollup/plugin-node-resolve": "^13.0.6",
     "stats.js": "^0.17.0",
     "three": "^0.132.2",
     "web-ifc": "^0.0.29",

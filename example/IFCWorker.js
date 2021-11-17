@@ -86663,6 +86663,7 @@ class IFCParser {
             const flatMesh = flatMeshes.get(i);
             const placedGeom = flatMesh.geometries;
             for (let j = 0; j < placedGeom.size(); j++) {
+                console.log(placedGeom.get(j));
                 await this.savePlacedGeometry(placedGeom.get(j), flatMesh.expressID);
             }
         }
