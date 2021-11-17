@@ -72,6 +72,7 @@ export interface IfcModel {
     modelID: number;
     mesh: IfcMesh;
     items: GeometriesByMaterials;
+    itemsNew?: any;
     types: TypesMap;
     jsonData: { [id: number]: JSONObject };
 }

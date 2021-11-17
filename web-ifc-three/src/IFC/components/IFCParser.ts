@@ -100,48 +100,11 @@ export class IFCParser implements ParserAPI {
 
     private async loadAllGeometry() {
         await this.saveAllPlacedGeometriesByMaterial();
-        const geoGroup = this.buildMHRAObject(); // Build the object
-        console.log(geoGroup);
-        return this.generateAllGeometriesByMaterial();
-    }
-
-    // Desired result:
-    // {
-    //     expressID: [vertices]
-    // }
-    private buildMHRAObject() {
-
-        // NB! Geometry er allerede én stor buggerGeometri på det her tidspunkt!
-        const geometryObject = this.getGeometryAndMaterialsIndividual();
-
-        const globalGroup = new Group();
-
-        Object.keys(geometryObject).forEach((expressID: string) => {
-
-            const geometryArray: any = geometryObject[expressID];
-
-            let objectModel: any;
-            if(geometryArray.length > 1) objectModel = new Group();
-
-            geometryArray.forEach((geoMatObj: any) => {
-                const mesh = new IFCModel(geoMatObj.geometry, geoMatObj.material);
-
-                // Single material object
-                if(objectModel == undefined){
-                    objectModel = mesh;
-                }
-                // Multi-material object
-                else{
-                    objectModel.add(mesh);
-                }
-                objectModel.name = expressID;
-            });
-
-            globalGroup.add(objectModel);
-
-        });
-
-        return globalGroup;
+        const model = await this.generateAllGeometriesByMaterial();
+        await this.getGeometryAndMaterialsIndividual();
+        console.log(model);
+        console.log(this.state.models[this.currentModelID]);
+        return model;
     }
 
     private getGeometryAndMaterialsIndividual() {
@@ -179,7 +142,7 @@ export class IFCParser implements ParserAPI {
             }
         }
 
-        return obj;
+        this.state.models[this.currentModelID].itemsNew = obj;
 
     }
 

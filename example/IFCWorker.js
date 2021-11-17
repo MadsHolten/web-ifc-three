@@ -86626,31 +86626,11 @@ class IFCParser {
     }
     async loadAllGeometry() {
         await this.saveAllPlacedGeometriesByMaterial();
-        const geoGroup = this.buildMHRAObject();
-        console.log(geoGroup);
-        return this.generateAllGeometriesByMaterial();
-    }
-    buildMHRAObject() {
-        const geometryObject = this.getGeometryAndMaterialsIndividual();
-        const globalGroup = new Group();
-        Object.keys(geometryObject).forEach((expressID) => {
-            const geometryArray = geometryObject[expressID];
-            let objectModel;
-            if (geometryArray.length > 1)
-                objectModel = new Group();
-            geometryArray.forEach((geoMatObj) => {
-                const mesh = new IFCModel(geoMatObj.geometry, geoMatObj.material);
-                if (objectModel == undefined) {
-                    objectModel = mesh;
-                }
-                else {
-                    objectModel.add(mesh);
-                }
-                objectModel.name = expressID;
-            });
-            globalGroup.add(objectModel);
-        });
-        return globalGroup;
+        const model = await this.generateAllGeometriesByMaterial();
+        await this.getGeometryAndMaterialsIndividual();
+        console.log(model);
+        console.log(this.state.models[this.currentModelID]);
+        return model;
     }
     getGeometryAndMaterialsIndividual() {
         const items = this.state.models[this.currentModelID].items;
@@ -86673,7 +86653,7 @@ class IFCParser {
                 });
             }
         }
-        return obj;
+        this.state.models[this.currentModelID].itemsNew = obj;
     }
     generateAllGeometriesByMaterial() {
         const { geometry, materials } = this.getGeometryAndMaterials();
